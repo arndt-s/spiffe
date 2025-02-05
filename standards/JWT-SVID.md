@@ -61,7 +61,7 @@ PS512 | RSASSA-PSS using SHA-512 and MGF1 with SHA-512
 The `kid` header is optional.
 
 ### 2.3. Type
-The `typ` header is optional. If set, its value MUST be either `JWT` or `JOSE`.
+The `typ` header is optional, if set it MUST be either `JWT`, `JOSE` or `wimse-id+jwt`.
 
 ## 3. JWT Claims
 The JWT-SVID specification does not introduce any new claims, though it does set some restrictions on the registered claims defined by [RFC 7519][1]. Registered claims not described in this document, in addition to private claims, MAY be used as implementers see fit. It should be noted, however, that reliance on claims which are not defined here may impact interoperability, as the producing and consuming applications must independently agree. Implementers should exercise caution when introducing additional claims and carefully consider the impact on SVID interoperability, particularly in environments where the implementer does not control both the producer and the consumer. If the use of additional claims is absolutely necessary, they should be made collision-resistant per [RFC 7519][1] recommendations.
@@ -72,16 +72,22 @@ This section outlines the requirements and restrictions placed upon existing reg
 The `sub` claim MUST be set to the SPIFFE ID of the workload to which it is issued. This is the primary claim against which workload identity is asserted.
 
 ### 3.2. Audience
-The `aud` claim MUST be present, containing one or more values. Validators MUST reject tokens without an `aud` claim set, or if the value that the validator identifies with is not present as an `aud` element. It is strongly recommended that the number of values be limited to one in normal cases. Please see the Security Considerations section for more information.
+The `aud` claim MUST be present if the `cnf` claim is not present. When present can contain one or more values. Validators MUST reject tokens without an `aud` and `cnf` claim set, or if the value that the validator identifies with is not present in an existing `aud` element. When set, it is strongly recommended that the number of values be limited to one in normal cases. Please see the Security Considerations section for more information.
+
+If the `cnf` claim is set `aud` SHOULD NOT be present.
 
 The values chosen are site-specific, and SHOULD be scoped to the service which it is intended to be presented to. For example, `reports` or `spiffe://example.org/reports` are suitable values for tokens which are presented to the reports service. Values such as `production` or `spiffe://example.org/` are discouraged due to their wide scope, opening the possibility for impersonation if just a single service in `production` is compromised.
 
 ### 3.3. Expiration Time
 The `exp` claim MUST be set, and validators MUST reject tokens without this claim. Implementers are encouraged to keep the validity period as small as is reasonably possible, however this specification does not set any hard upper limits on its value.
 
+### 3.4 Confirmation
+The `cnf` claim SHOULD be set, effectively binding the JWT-SVID to a key. Its value & purpose is defined in [WIMSE-WIT][13] section [4.1][14].
+
 ## 4. Token Signing and Validation
 JWT-SVID signing and validation semantics are the same as regular JWTs/JWSs. Validators MUST ensure that the `alg` header is set to a supported value before processing.
 
+TODO rework this
 JWT-SVID signatures are computed and validated following the steps outlined in [RFC 7519 section 7][2]. The `aud` and `exp` claims MUST be present and processed according to [RFC 7519][1] sections [4.1.3][3] and [4.1.4][4]. Validators receiving tokens without the `aud` and `exp` claims set MUST reject the token.
 
 ## 5. Token Transmission
@@ -132,6 +138,41 @@ Field | Type | Requirement
 `aud` | `Claim` | At least one value present. Users should configure at least one acceptable value in advance. Reject otherwise.
 `exp` | `Claim` | Must be set. Must not be in the past (a small amount of leeway is acceptable). Reject otherwise.
 
+## Appendix B. Transitioning to key-bound tokens and `Workload-Identity-Token` HTTP header
+
+With the standardization of Workload Identity workloads SHOULD use the `Workload-Identity-Token` and `Workload-Proof-Token` headers instead of the `Authorization` header when conveying key-bound JWT-SVIDs and their respective proofs. To ease this transitioning in complex environments the following process is reccommended:
+
+|Phase|Description|
+|----|-----|
+| Initial | Initial state, workloads leverage JWT-SVIDs not bound to a key and with audience |
+| Transition | Transitioning state where:<br> - some workloads using & validating key-bound JWT-SVIDs and proofs and non-key-bound JWT-SVIDs.<br> - some workloads only using & validating non-key-bound JWT-SVIDs. |
+| Completed | All workloads understand key-bound JWT-SVIDs.|
+
+### Rules
+
+| Rule \ Phase | Initial | Transition | Completed |
+|------|-----------------|--------------------|-------------------|
+| Accept unbound JWT-SVID in `Authorization` header | Yes | Yes | No |
+| Accept bound JWT-SVID in `Workload-Identity-Token` header alongside proof token in `Workload-Proof-Token` header| N/A | Yes | Yes |
+| Request JWT-SVID without key binding and/or audience | Yes | Yes | No |
+| Request JWT-SVID with key binding and no audience | N/A | Yes | Yes |
+| Send bound JWT-SVID + proof | N/A | If peer supports | Yes |
+| Send unbound JWT-SVID in `Authorization` header | Yes | Only if peer lacks support | No |
+
+We reccommend to add a feature flag into transitioning workloads that controls whether `Authorization` header should be accepted or not. During transitioning this feature flag can be active and de-activated once transitioning is complete or all peer-workloads send/accept key-bound JWT-SVIDs.
+
+### Peer support
+
+A crucial part in the Transition phase is that workloads need to be aware of the support of peer-workloads. Deployments differ and a silver bullet to acchieve this does not exist. The following options describe some of the mechanisms trust domains choose to deploy:
+
+* WWW-Authenticate response
+
+Workloads may indicate their support via the `WWW-Authenticate` response header.
+
+TODO add more
+
+----
+
 [1]: https://tools.ietf.org/html/rfc7519
 [2]: https://tools.ietf.org/html/rfc7519#section-7
 [3]: https://tools.ietf.org/html/rfc7519#section-4.1.3
@@ -144,3 +185,5 @@ Field | Type | Requirement
 [10]: https://tools.ietf.org/html/rfc7518#section-3.5
 [11]: https://tools.ietf.org/html/rfc7517
 [12]: https://tools.ietf.org/html/rfc7519#section-1
+[13]: https://datatracker.ietf.org/doc/html/draft-ietf-wimse-s2s-protocol-02
+[14]: https://datatracker.ietf.org/doc/html/draft-ietf-wimse-s2s-protocol-02#section-4.1

@@ -106,6 +106,9 @@ message JWTSVIDRequest {
     // Optional. The requested SPIFFE ID for the JWT-SVID. If unset, all
     // JWT-SVIDs to which the workload is entitled are requested.
     string spiffe_id = 2;
+
+    // Optional. Indicates if the JWT-SVID should be bound to a key.
+    bool bind_key = 3;
 }
 
 // The JWTSVIDResponse message conveys JWT-SVIDs.
@@ -127,6 +130,11 @@ message JWTSVID {
     // For example, `internal` and `external` to indicate an SVID for internal or
     // external use, respectively.
     string hint = 3;
+
+    // Optional. ASN.1 DER encoded PKCS#8 private key the JWT-SVID is bound to. 
+    // Corresponds to the `cnf` claim in the svid which contains the public part
+    // of this key.
+    bytes svid_key = 4;
 }
 
 // The JWTBundlesRequest message conveys parameters for requesting JWT bundles.
@@ -151,6 +159,10 @@ message ValidateJWTSVIDRequest {
     // Required. The JWT-SVID to validate, encoded using JWS Compact
     // Serialization.
     string svid = 2;
+
+    // Optional. The key proof presented alongside the JWT-SVID. Formatted 
+    // as WIMSE-WPT. This parameter is required if JWT-SVID is key-bound.
+    string key_proof = 3;
 }
 
 // The ValidateJWTSVIDReponse message conveys the JWT-SVID validation results.
@@ -161,4 +173,7 @@ message ValidateJWTSVIDResponse {
     // Required. Claims contained within the payload of the validated JWT-SVID.
     // This includes both SPIFFE-required and non-required claims.
     google.protobuf.Struct claims = 2;
+
+    // Optional. Claims of the presented key proof.
+    google.protobuf.Struct key_proof_claims = 3; 
 }

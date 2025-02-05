@@ -260,6 +260,9 @@ message JWTSVIDRequest {
     // Optional. The requested SPIFFE ID for the JWT-SVID. If unset, JWT-SVIDs
     // for all identities the workload is entitled to are returned.
     string spiffe_id = 2;
+
+    // Optional. Indicates if the JWT-SVID should be bound to a key.
+    bool bind_key = 3;
 }
 
 // The JWTSVIDResponse message conveys JWT-SVIDs.
@@ -281,6 +284,11 @@ message JWTSVID {
     // For example, `internal` and `external` to denote an SVID for internal or
     // external use, respectively.
     string hint = 3;
+
+    // Optional. ASN.1 DER encoded PKCS#8 private key the JWT-SVID is bound to. 
+    // Corresponds to the `cnf` claim in the svid which contains the public part
+    // of this key.
+    bytes svid_key = 4;
 }
 
 // The JWTBundlesRequest message conveys parameters for requesting JWT bundles.
@@ -305,6 +313,10 @@ message ValidateJWTSVIDRequest {
     // Required. The JWT-SVID to validate, encoded using JWS Compact
     // Serialization.
     string svid = 2;
+
+    // Optional. The key proof presented alongside the JWT-SVID. Formatted 
+    // as WIMSE-WPT. This parameter is required if JWT-SVID is key-bound.
+    string key_proof = 3;
 }
 
 // The ValidateJWTSVIDReponse message conveys the JWT-SVID validation results.
@@ -315,6 +327,9 @@ message ValidateJWTSVIDResponse {
     // Required. Claims contained within the payload of the validated JWT-SVID.
     // This includes both SPIFFE-required and non-required claims.
     google.protobuf.Struct claims = 2;
+
+    // Optional. Claims of the presented key proof.
+    google.protobuf.Struct key_proof_claims = 3;
 }
 ```
 
@@ -322,13 +337,13 @@ message ValidateJWTSVIDResponse {
 
 #### 6.2.1 FetchJWTSVID
 
-The `FetchJWTSVID` RPC allows clients to request one or more short-lived JWT-SVIDs for a specific audience.
+The `FetchJWTSVID` RPC allows clients to request one or more short-lived JWT-SVIDs.
 
-The `JWTSVIDRequest` request message contains a mandatory `audience` field, which MUST contain the value to embed in the audience claim of the returned JWT-SVIDs. The `spiffe_id` field is optional, and is used to request a JWT-SVID for a specific SPIFFE ID. If unspecified, the server MUST return JWT-SVIDs for all identities authorized for the client. 
+The `JWTSVIDRequest` request message allows to control key-binding via the `bind_key` field. If set to true a private key is returned alongside the JWT-SVID which carry the corresponding public part as confirmation claims inside them. if set to false the returned JWT-SVID does not carry a confirmation claim and no private key is returned. The `audience` field allows to specify one or more audience claims of the returned JWT-SVIDs. The `spiffe_id` field is optional, and is used to request a JWT-SVID for a specific SPIFFE ID. If unspecified, the server MUST return JWT-SVIDs for all identities authorized for the client. 
 
 The `JWTSVIDResponse` response message consists of a mandatory `svids` field, which MUST contain one or more `JWTSVID` messages.
 
-All fields in the `JWTSVID` message are mandatory, with the exception of the `hint` field. When the `hint` field is set (i.e. non-empty), SPIFFE Workload API servers MUST ensure its value is unique amongst the set of returned SVIDs in any given `JWTSVIDResponse` message. In the event that a SPIFFE Workload API client encounters more than one `JWTSVID` message with the same `hint` value set, then the first message in the list SHOULD be selected.
+All fields in the `JWTSVID` message are mandatory, with the exception of the `hint` and the `key_proof` field. When the `hint` field is set (i.e. non-empty), SPIFFE Workload API servers MUST ensure its value is unique amongst the set of returned SVIDs in any given `JWTSVIDResponse` message. In the event that a SPIFFE Workload API client encounters more than one `JWTSVID` message with the same `hint` value set, then the first message in the list SHOULD be selected. The `key_proof` field in the response MUST be present when `bind_key` in the request is set to true and MUST NOT be present when `bind_key` is set to false.
 
 If the client is not authorized for any identities, or not authorized for the specific identity requested via the `spiffe_id` field, then the server SHOULD respond with the "PermissionDenied" gRPC status code (see the [Error Codes](SPIFFE_Workload_Endpoint.md#6-error-codes) section in the SPIFFE Workload Endpoint specification for more information).
 
