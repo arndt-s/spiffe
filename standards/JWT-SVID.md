@@ -61,7 +61,7 @@ PS512 | RSASSA-PSS using SHA-512 and MGF1 with SHA-512
 The `kid` header is optional.
 
 ### 2.3. Type
-The `typ` header is optional, if set it MUST be either `JWT`, `JOSE` or `wimse-id+jwt`.
+The `typ` header is optional. If set, its value MUST be either `JWT`, `JOSE` or `wimse-id+jwt`.
 
 ## 3. JWT Claims
 The JWT-SVID specification does not introduce any new claims, though it does set some restrictions on the registered claims defined by [RFC 7519][1]. Registered claims not described in this document, in addition to private claims, MAY be used as implementers see fit. It should be noted, however, that reliance on claims which are not defined here may impact interoperability, as the producing and consuming applications must independently agree. Implementers should exercise caution when introducing additional claims and carefully consider the impact on SVID interoperability, particularly in environments where the implementer does not control both the producer and the consumer. If the use of additional claims is absolutely necessary, they should be made collision-resistant per [RFC 7519][1] recommendations.
@@ -74,7 +74,7 @@ The `sub` claim MUST be set to the SPIFFE ID of the workload to which it is issu
 ### 3.2. Audience
 The `aud` claim MUST be present if the `cnf` claim is not present. When present can contain one or more values. Validators MUST reject tokens without an `aud` and `cnf` claim set, or if the value that the validator identifies with is not present in an existing `aud` element. When set, it is strongly recommended that the number of values be limited to one in normal cases. Please see the Security Considerations section for more information.
 
-If the `cnf` claim is set `aud` SHOULD NOT be present.
+If the `cnf` claim is present, the `aud` claim SHOULD NOT be present.
 
 The values chosen are site-specific, and SHOULD be scoped to the service which it is intended to be presented to. For example, `reports` or `spiffe://example.org/reports` are suitable values for tokens which are presented to the reports service. Values such as `production` or `spiffe://example.org/` are discouraged due to their wide scope, opening the possibility for impersonation if just a single service in `production` is compromised.
 
@@ -87,9 +87,10 @@ The `cnf` claim SHOULD be set, effectively binding the JWT-SVID to a key. Its va
 ## 4. Token Signing and Validation
 JWT-SVID signing and validation semantics are the same as regular JWTs/JWSs. Validators MUST ensure that the `alg` header is set to a supported value before processing.
 
-TODO rework this
+TODO rework this paragraph.
 JWT-SVID signatures are computed and validated following the steps outlined in [RFC 7519 section 7][2]. The `aud` and `exp` claims MUST be present and processed according to [RFC 7519][1] sections [4.1.3][3] and [4.1.4][4]. Validators receiving tokens without the `aud` and `exp` claims set MUST reject the token.
 
+TODO rework this section.
 ## 5. Token Transmission
 This section describes the manner in which a JWT-SVID may be transmitted from one workload to another.
 
