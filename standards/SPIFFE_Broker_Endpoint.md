@@ -74,36 +74,36 @@ If the scheme is set to `tcp`, then the host component of the authority MUST be 
 
 The SPIFFE Broker Endpoint requires mutual authentication in the form of Mutual Transport Layer Security as defined in [RFC 5246](https://www.rfc-editor.org/rfc/rfc5246.txt) (TLS 1.2) and [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446.txt) (TLS 1.3) in the form of X509-SVIDs. Prior to the mutual authentication both parties need to retrieve the SVID and bundle, for instance by using the SPIFFE Workload API.
 
-The nature of the SPIFFE Broker Endpoint requires strong access control and only authorized callers must be allowed to connect. Controlling access only by accessibility is highly discouraged and implementors should restrict both, only making the endpoint accessible to allowed components and implementing strict access control on the endpoint. It is reccomended to base access control on the SPIFFE-ID of the peer.
+The nature of the SPIFFE Broker Endpoint requires strong access control and only authorized callers must be allowed to connect. Controlling access only by accessibility is highly discouraged and implementors should restrict both, only making the endpoint accessible to allowed components and implementing strict access control on the endpoint. It is reccomended to base access control on the SPIFFE-ID of the client. Given the broad capabilities the SPIFFE Broker Endpoint offers to authorized clients the policy is reccommended to be static and based of configuration.
 
 In addition, it is required to also perform server authentication on the broker in the form of validating the expected SPIFFE-ID of the SPIFFE provider. This is to prevent man-in-the-middle attacks where an attacker poses as a SPIFFE provider and returns poisened SVIDs or bundles to a legitimate broker.
 
 ## 6. Error Codes
 
-A number of error conditions may be encountered by the client when interacting with the SPIFFE Workload Endpoint. For instance, the client request may have omitted the mandatory security header (see the Transport section for more information), or the SPIFFE Workload Endpoint implementation may still be initializing or otherwise unavailable.
+A number of error conditions may be encountered by the client when interacting with the SPIFFE Broker Endpoint. For instance, the client request may have omitted the mandatory security header (see the Transport section for more information), or the SPIFFE Broker Endpoint implementation may still be initializing or otherwise unavailable.
 
-Implementations receiving a client request that does not contain the mandatory security header MUST respond with gRPC status code "InvalidArgument". Clients encountering the "InvalidArgument" status code SHOULD NOT retry, as this indicates that an error has been made in the client implementation, and is not recoverable. 
+Implementations receiving a client request that does not contain the mandatory security header MUST respond with gRPC status code "INVALID_ARGUMENT". Clients encountering the "INVALID_ARGUMENT" status code SHOULD NOT retry, as this indicates that an error has been made in the client implementation, and is not recoverable. 
 
-In the event that the SPIFFE Workload Endpoint implementation is running but unavailable, for instance if it is still initializing or it is performing load shedding, clients will receive the gRPC status code "Unavailable". Clients receiving this code OR clients which are unable to reach the SPIFFE Workload Endpoint MAY retry with a backoff.
+In the event that the SPIFFE Broker Endpoint implementation is running but unavailable, for instance if it is still initializing or it is performing load shedding, clients will receive the gRPC status code "UNAVAILABLE". Clients receiving this code OR clients which are unable to reach the SPIFFE Workload Endpoint MAY retry with a backoff.
 
-Finally, in the event that a SPIFFE Workload Endpoint service does not have an identity defined for a given caller/client, the service SHOULD respond with gRPC code "PermissionDenied". Clients receiving this code MAY retry with a backoff, as such a response could be encountered if the service implementation is eventually consistent.
+In situations where the client cannot be idenfied "UNAUTHENTICATED" is returned to clients. Clients should keep in mind that this is unlikely to be observed because authentication errors result in a rejected connection before the gRPC layer is initialized. Retries using the same certificate SHOULD NOT be made, instead clients should turn to the SPIFFE Workload API and refresh their credentials before retrying.
 
-Please see [Appendix A](#appendix-a-list-of-error-codes) for a summary of error conditions and codes.
+Clients that are not valid brokers and are not authorized are expected to observe "PERMISSION_DENIED". Clients receiving this code MAY retry with a backoff to allow for non-static policy at the server.
 
-## 7. Extensibility and Services Rendered
-
-The SPIFFE Workload Endpoint may expose a variety of identity-related services, such as identity issuance or identity validation. Individual services are exposed through the use of the gRPC/Protobuf service primitive. A new (uniquely named) service must be introduced in order to extend the SPIFFE Workload Endpoint.
-
-Since it is the promise of this specification to provide strong portability, the authors feel that allowing extension of existing logical services works against the spirit of SPIFFE. Should additional functionality be rendered by adding endpoints to existing logical services, a portability guarantee cannot be made in the event that a dependent workload moves from one SPIFFE-compliant environment to another. In light of this, existing gRPC logical services such as the SPIFFE Workload API MUST NOT be extended directly. Rather, the endpoint may be augmented with the addition of independent logical services not described in the SPIFFE specification set.
-
-While all SPIFFE Workload Endpoint implementations MUST expose the SPIFFE Workload API, it may at times be difficult to know what additional services are supported in a given environment. As a result, endpoint implementers SHOULD include support for [gRPC Server Reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md). If a client encounters an endpoint which does not support gRPC Server Reflection, it SHOULD assume that the only available services are those defined in the SPIFFE Workload API.
-
-## Appendix A. List of Error Codes
-
-This section enumerates the various error codes that may be returned by a SPIFFE Workload Endpoint implementation, the conditions under which they may be returned, and how they should be handled. Please see the [Error Codes](#6-error-codes) section as well as the [gRPC Code package documentation](https://godoc.org/google.golang.org/grpc/codes) for more information about these codes.
+As a summary, the expected error codes are:
 
 | Code | Condition | Client Behavior |
 | ---- | --------- | -------- |
-| InvalidArgument | The gRPC security header is not present in the client request. Please see the [Transport](#3-transport) section for more information. | Report an error, don't retry. |
-| Unavailable | The SPIFFE Workload Endpoint implementation is unable to handle the request. | Retry with a backoff. |
-| PermissionDenied | The client is not permitted to perform the requested operation. Depending on the implementation, this may indicate that the workload has started before the identity or trust domain has been provisioned. | Retry with a backoff. |
+| INVALID_ARGUMENT | The gRPC security header is not present in the client request. Please see the [Transport](#3-transport) section for more information. | Report an error, don't retry. |
+| UNAVAILABLE | The SPIFFE Broker Endpoint implementation is unable to handle the request. | Retry with a backoff. |
+| UNAUTHENTICATED | Client cannot be identified. | Refresh credentials and retry  with a backoff. |
+| PERMISSION_DENIED | Client is not authorized. | Report an error, don't retry. |
+| NOT_FOUND | The workload the broker represents could not have been identified. | Verify existance, if positive retry with a backoff. |
+
+## 7. Extensibility and Services Rendered
+
+The SPIFFE Broker Endpoint may expose a variety of identity-related services, such as brokering or delegated issuance. Individual services are exposed through the use of the gRPC/Protobuf service primitive. A new (uniquely named) service must be introduced in order to extend the SPIFFE Broker Endpoint.
+
+Since it is the promise of this specification to provide strong portability, the authors feel that allowing extension of existing logical services works against the spirit of SPIFFE. Should additional functionality be rendered by adding endpoints to existing logical services, a portability guarantee cannot be made in the event that a dependent workload moves from one SPIFFE-compliant environment to another. Instead, if use cases are identified that are common across all SPIFFE implementations changes should be made directly in SPIFFE to keep portability high.
+
+While all SPIFFE Broker Endpoint implementations MUST expose the SPIFFE Broker API, it may at times be difficult to know what additional services are supported in a given environment. As a result, endpoint implementers SHOULD include support for [gRPC Server Reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md). If a client encounters an endpoint which does not support gRPC Server Reflection, it SHOULD assume that the only available services are those defined in the SPIFFE Broker API.
