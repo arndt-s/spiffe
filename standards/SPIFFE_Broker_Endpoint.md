@@ -48,35 +48,35 @@ flowchart TD
 
 ## 2. Accessibility
 
-The SPIFFE Workload Endpoint often serves as the mechanism for initial identity bootstrapping, including the delivery and management of roots of trust. Since a workload in its early stages may have no prior knowledge of its identity or whom it should trust, it is very difficult to secure access to the endpoint. As a result, the SPIFFE Workload Endpoint SHOULD be exposed through a local endpoint, and implementers SHOULD NOT expose the same endpoint instance to more than one host. Keeping the endpoint and related traffic confined to a single host mitigates bootstrap problems as they relate to initial authentication and issuance security. Please see the [Transport](#3-transport) and [Authentication](#5-authentication) sections for more detail.
+The accessibility of the SPIFFE Broker Endpoint should be restricted to its users and not available to workloads, if possible. It may be explicitly chosen to be offered to users outside of the host. By default, it should be exposed through a local endpoint.
 
 ## 3. Transport
 
-The SPIFFE Workload Endpoint MUST be served over gRPC, and compliant clients MUST support gRPC. It may be exposed as either a Unix Domain Socket (UDS) or a TCP listen socket. Implementations SHOULD prefer Unix Domain Socket transport, however TCP is supported for implementations in which Unix Domain Sockets are impractical or impossible. TCP transport MUST NOT be used unless the underlying network allows the Workload Endpoint server to strongly authenticate the workload based on source IP address (e.g., over a localhost or link-local network), or other strong network-level assertions (e.g., via an SDN policy). 
+The SPIFFE Broker Endpoint MUST be served over gRPC, and compliant clients MUST support gRPC. It may be exposed as either a Unix Domain Socket (UDS) or a TCP listen socket. Implementations SHOULD prefer Unix Domain Socket transport, however TCP is supported for implementations in which Unix Domain Sockets are impractical or impossible. 
 
-As a hardening measure against [Server Side Request Forgery](https://www.owasp.org/index.php/Server_Side_Request_Forgery) (SSRF) attacks, every client request to the SPIFFE Workload Endpoint MUST include the static gRPC metadata key `workload.spiffe.io` with a value of `true` (case sensitive). Requests not including this metadata key/value MUST be rejected by the SPIFFE Workload Endpoint (see the [Error Codes](#6-error-codes) section for more information). This prevents an attacker from exploiting an SSRF vulnerability to access the SPIFFE Workload Endpoint unless the vulnerability also gives the attacker control over outgoing gRPC metadata.
+As a hardening measure against [Server Side Request Forgery](https://www.owasp.org/index.php/Server_Side_Request_Forgery) (SSRF) attacks, every client request to the SPIFFE Broker Endpoint MUST include the static gRPC metadata key `broker.spiffe.io` with a value of `true` (case sensitive). Requests not including this metadata key/value MUST be rejected by the SPIFFE Broker Endpoint (see the [Error Codes](#6-error-codes) section for more information). This prevents an attacker from exploiting an SSRF vulnerability to access the SPIFFE Broker Endpoint unless the vulnerability also gives the attacker control over outgoing gRPC metadata.
 
 ### 3.1 Transport Security
 
-Transport Layer Security MUST NOT be required, despite the fact that gRPC strongly prefers it. Since the SPIFFE Workload Endpoint often delivers and manages roots of trust, we can not expect the workload to have advanced knowledge of active roots. As a result, the workload may have no way of validating the authenticity of the presented identity in early stages, except by virtue of the privileged position of the Workload API implementation. This is another reason that SPIFFE Workload Endpoint instances should not be exposed to more than a single host. Please see the [Authentication](#5-authentication) section for more information.
+The SPIFFE Broker Endpoint requires transport security in the form of mutual TLS. Compared to the SPIFFE Workload Endpoint the broker and the implementation are expected to have a previously established root of trust in the form of SPIFFE bundles and X509-SVIDs. Effectively, this means that both parties need to make use of the SPIFFE Workload API as workloads first, before serving or connecting to the SPIFFE Broker Endpoint. Please see the [Authentication](#5-authentication) section for more information.
 
 ## 4. Locating the Endpoint
 
-Clients may be explicitly configured with the socket location, or may utilize the well-known environment variable `SPIFFE_ENDPOINT_SOCKET`. If not explicitly configured, conforming clients MUST fall back to the environment variable.
+Clients may be explicitly configured with the socket location, or may utilize the well-known environment variable `SPIFFE_BROKER_SOCKET`. If not explicitly configured, conforming clients MUST fall back to the environment variable.
 
-The value of the `SPIFFE_ENDPOINT_SOCKET` environment variable is structured as an [RFC 3986](https://www.ietf.org/rfc/rfc3986.txt) URI. The scheme MUST be set to either `unix` or `tcp`, which indicates that the endpoint is served over a Unix Domain Socket or a TCP listen socket, respectively.
+The value of the `SPIFFE_BROKER_SOCKET` environment variable is structured as an [RFC 3986](https://www.ietf.org/rfc/rfc3986.txt) URI. The scheme MUST be set to either `unix` or `tcp`, which indicates that the endpoint is served over a Unix Domain Socket or a TCP listen socket, respectively.
 
 If the scheme is set to `unix`, then the authority component MUST NOT be set, and the path component MUST be set to the absolute path of the SPIFFE Workload Endpoint Unix Domain Socket (e.g. `unix:///path/to/endpoint.sock`). The scheme and path components are mandatory, and no other component may be set.
 
-If the scheme is set to `tcp`, then the host component of the authority MUST be set to an IP address, and the port component of the authority MUST be set to the TCP port number of the SPIFFE Workload Endpoint TCP listen socket. The scheme, host, and port components are mandatory, and no other component may be set. As an example, `tcp://127.0.0.1:8000` is valid, and `tcp://127.0.0.1:8000/foo` is not.
+If the scheme is set to `tcp`, then the host component of the authority MUST be set to either a DNS or IP address. The port component of the authority MUST be set to the TCP port number of the SPIFFE Workload Endpoint TCP listen socket. The scheme, host, and port components are mandatory, and no other component may be set. As an example, `tcp://127.0.0.1:8000` for a local SPIFFE Broker Endpoint is valid, or `tcp:/broker.spiffe.svc.cluster.local` for a Kubernetes internal Broker Endpoint.
 
-## 5. Authentication
+## 5. Authentication and Authorization
 
-The SPIFFE Workload Endpoint often serves as the mechanism for initial identity bootstrapping. As a result, it is expected that the workload does not have any "secret" material which it can use to authenticate itself. To accommodate this very important use case, the SPIFFE Workload Endpoint MUST NOT require any direct authentication of its clients. 
+The SPIFFE Broker Endpoint requires mutual authentication in the form of Mutual Transport Layer Security as defined in [RFC 5246](https://www.rfc-editor.org/rfc/rfc5246.txt) (TLS 1.2) and [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446.txt) (TLS 1.3) in the form of X509-SVIDs. Prior to the mutual authentication both parties need to retrieve the SVID and bundle, for instance by using the SPIFFE Workload API.
 
-In place of direct client authentication, implementers SHOULD perform out-of-band authenticity checks. This may include techniques such as kernel introspection or orchestrator interrogation. As an example, it is possible to understand which process is calling the API by examining kernel socket state. Another approach is to allow an orchestrator to place a Unix Domain Socket into a particular container, informing the SPIFFE Workload Endpoint implementation of the container's properties/identity. This information can then be used as an authentication mechanism.
+The nature of the SPIFFE Broker Endpoint requires strong access control and only authorized callers must be allowed to connect. Controlling access only by accessibility is highly discouraged and implementors should restrict both, only making the endpoint accessible to allowed components and implementing strict access control on the endpoint. It is reccomended to base access control on the SPIFFE-ID of the peer.
 
-It should be noted that while the method(s) by which this is done is implementation-specific, the chosen method(s) MUST NOT require the workload to actively participate.
+In addition, it is required to also perform server authentication on the broker in the form of validating the expected SPIFFE-ID of the SPIFFE provider. This is to prevent man-in-the-middle attacks where an attacker poses as a SPIFFE provider and returns poisened SVIDs or bundles to a legitimate broker.
 
 ## 6. Error Codes
 
