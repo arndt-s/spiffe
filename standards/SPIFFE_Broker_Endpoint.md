@@ -48,11 +48,11 @@ flowchart TD
 
 ## 2. Accessibility
 
-The accessibility of the SPIFFE Broker Endpoint should be restricted to its users and not available to workloads, if possible. It may be explicitly chosen to be offered to users outside of the host. By default, it should be exposed through a local endpoint.
+The SPIFFE Broker Endpoint SHOULD be exposed through a local endpoint, and implementers SHOULD NOT expose the same endpoint instance to more than one host. Additionally, its accessibility SHOULD be restricted to designated clients and SHOULD NOT be available to workloads.
 
 ## 3. Transport
 
-The SPIFFE Broker Endpoint MUST be served over gRPC, and compliant clients MUST support gRPC. It may be exposed as either a Unix Domain Socket (UDS) or a TCP listen socket. Implementations SHOULD prefer Unix Domain Socket transport, however TCP is supported for implementations in which Unix Domain Sockets are impractical or impossible. 
+The SPIFFE Broker Endpoint MUST be served over gRPC, and compliant clients MUST support gRPC. It may be exposed as either a Unix Domain Socket (UDS) or a TCP listen socket. Implementations SHOULD prefer Unix Domain Socket transport, however TCP is supported for implementations in which Unix Domain Sockets are impractical or impossible. TCP transport MUST NOT be used unless the underlying network allows the Workload Endpoint server to strongly authenticate the workload based on source IP address (e.g., over a localhost or link-local network), or other strong network-level assertions (e.g., via an SDN policy).
 
 As a hardening measure against [Server Side Request Forgery](https://www.owasp.org/index.php/Server_Side_Request_Forgery) (SSRF) attacks, every client request to the SPIFFE Broker Endpoint MUST include the static gRPC metadata key `broker.spiffe.io` with a value of `true` (case sensitive). Requests not including this metadata key/value MUST be rejected by the SPIFFE Broker Endpoint (see the [Error Codes](#6-error-codes) section for more information). This prevents an attacker from exploiting an SSRF vulnerability to access the SPIFFE Broker Endpoint unless the vulnerability also gives the attacker control over outgoing gRPC metadata.
 
@@ -68,7 +68,7 @@ The value of the `SPIFFE_BROKER_SOCKET` environment variable is structured as an
 
 If the scheme is set to `unix`, then the authority component MUST NOT be set, and the path component MUST be set to the absolute path of the SPIFFE Workload Endpoint Unix Domain Socket (e.g. `unix:///path/to/endpoint.sock`). The scheme and path components are mandatory, and no other component may be set.
 
-If the scheme is set to `tcp`, then the host component of the authority MUST be set to either a DNS or IP address. The port component of the authority MUST be set to the TCP port number of the SPIFFE Workload Endpoint TCP listen socket. The scheme, host, and port components are mandatory, and no other component may be set. As an example, `tcp://127.0.0.1:8000` for a local SPIFFE Broker Endpoint is valid, or `tcp:/broker.spiffe.svc.cluster.local` for a Kubernetes internal Broker Endpoint.
+If the scheme is set to `tcp`, then the host component of the authority MUST be set to an IP address, and the port component of the authority MUST be set to the TCP port number of the SPIFFE Workload Endpoint TCP listen socket. The scheme, host, and port components are mandatory, and no other component may be set. As an example, `tcp://127.0.0.1:8000` is valid, and `tcp://127.0.0.1:8000/foo` is not.
 
 ## 5. Authentication and Authorization
 
