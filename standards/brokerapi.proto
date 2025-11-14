@@ -36,7 +36,7 @@ service SpiffeBrokerAPI {
 // running in the same environment.
 message WorkloadPIDReference {
     // Required. The process id of the workload.
-    string pid = 1;
+    int32 pid = 1;
 }
 
 // The X509SVIDRequest message conveys parameters for requesting an X.509-SVID.
@@ -96,10 +96,13 @@ message X509BundlesRequest {
 // The X509BundlesResponse message carries a map of trust bundles the workload 
 // should trust.
 message X509BundlesResponse {
+    // Optional. ASN.1 DER encoded certificate revocation lists.
+    repeated bytes crl = 1;
+
     // Required. CA certificate bundles belonging to trust domains that the
     // workload should trust, keyed by the SPIFFE ID of the trust domain.
     // Bundles are ASN.1 DER encoded.
-    map<string, bytes> bundles = 1;
+    map<string, bytes> bundles = 2;
 }
 
 // The JWTSVIDRequest message conveys parameters for requesting JWT-SVIDs.
@@ -151,24 +154,4 @@ message JWTBundlesResponse {
     // Required. JWK encoded JWT bundles, keyed by the SPIFFE ID of the trust
     // domain.
     map<string, bytes> bundles = 1;
-}
-
-// The WorkloadReferenceError message is used to convey errors related to workload references.
-message WorkloadReferenceError {
-    // Required. The error code.
-    WorkloadReferenceErrorCode code = 1;
-}
-
-// The WorkloadReferenceErrorCode enum defines the possible error codes for workload reference errors.
-enum WorkloadReferenceErrorCode {
-    UNSPECIFIED = 0;
-
-    // The workload reference is invalid, e.g., it does not match the expected format.
-    WORKLOAD_REFERENCE_INVALID = 1;
-
-    // The referenced workload could not be found.
-    WORKLOAD_REFERENCE_NOT_FOUND = 2;
-
-    // The workload is not entitled to the receive the requested SVID or bundle.
-    WORKLOAD_NOT_ENTITLED = 3;
 }

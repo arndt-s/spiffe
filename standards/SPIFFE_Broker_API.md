@@ -152,7 +152,7 @@ service SpiffeBrokerAPI {
 // running in the same environment.
 message WorkloadPIDReference {
     // Required. The process id of the workload.
-    string pid = 1;
+    int32 pid = 1;
 }
 
 // The X509SVIDRequest message conveys parameters for requesting an X.509-SVID.
@@ -212,10 +212,13 @@ message X509BundlesRequest {
 // The X509BundlesResponse message carries a map of trust bundles the workload 
 // should trust.
 message X509BundlesResponse {
+    // Optional. ASN.1 DER encoded certificate revocation lists.
+    repeated bytes crl = 1;
+
     // Required. CA certificate bundles belonging to trust domains that the
     // workload should trust, keyed by the SPIFFE ID of the trust domain.
     // Bundles are ASN.1 DER encoded.
-    map<string, bytes> bundles = 1;
+    map<string, bytes> bundles = 2;
 }
 ```
 
