@@ -55,10 +55,13 @@ message X509SVIDResponse {
     // X.509-SVID, its private key, and the bundle for the trust domain.
     repeated X509SVID svids = 1;
 
+    // Optional. ASN.1 DER encoded certificate revocation lists.
+    repeated bytes crl = 2;
+
     // Optional. CA certificate bundles belonging to foreign trust domains that
     // the workload should trust, keyed by the SPIFFE ID of the foreign trust
     // domain. Bundles are ASN.1 DER encoded.
-    map<string, bytes> federated_bundles = 2;
+    map<string, bytes> federated_bundles = 3;
 }
 
 // The X509SVID message carries a single SVID and all associated information,
