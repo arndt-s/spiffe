@@ -6,6 +6,8 @@ syntax = "proto3";
 // Stability: Incubating.
 package spiffe.wag.v1;
 
+import "brokerapi.proto";
+
 // WorkloadAuthorizationGrant is served on the SPIFFE Workload Endpoint,
 // alongside (and independent of) the SPIFFE Workload API.
 service WorkloadAuthorizationGrant {
@@ -67,4 +69,37 @@ message WAG {
     // this identity should be used by a workload when more than one grant is
     // returned.
     string hint = 5;
+}
+
+// WorkloadAuthorizationGrantBroker is served on the SPIFFE Broker Endpoint,
+// alongside (and independent of) the SPIFFE Broker API.
+service WorkloadAuthorizationGrantBroker {
+    // Fetch Workload Authorization Grants for the referenced workload,
+    // addressed to the requested audience. If an optional SPIFFE ID is
+    // requested, only the grant for that SPIFFE ID is returned.
+    //
+    // The subject of every grant is a SPIFFE ID of the referenced workload,
+    // never that of the broker.
+    rpc FetchWAG(BrokerFetchWAGRequest) returns (FetchWAGResponse);
+}
+
+// The BrokerFetchWAGRequest message conveys parameters for requesting
+// Workload Authorization Grants on behalf of a workload.
+message BrokerFetchWAGRequest {
+    // Required. The reference identifying the workload.
+    spiffe.broker.WorkloadReference reference = 1;
+
+    // Required. The issuer identifier (RFC 8414) of the authorization server
+    // at which the grant will be presented. Becomes the single value of the
+    // grant's `aud` claim.
+    string audience = 2;
+
+    // Optional. A space-separated list of OAuth scopes (RFC 6749, Section
+    // 3.3) to have asserted in the grant's `scope` claim.
+    string scope = 3;
+
+    // Optional. The SPIFFE ID of the identity to request a grant for. If
+    // unset, grants for all identities the referenced workload is entitled to
+    // are returned.
+    string spiffe_id = 4;
 }
