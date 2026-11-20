@@ -1,6 +1,6 @@
 # The SPIFFE Workload Authorization Grant Profile
 
-> **Stability: Incubating** - see [STABILITY.md](STABILITY.md).
+> **Stability: Experimental** - see [STABILITY.md](STABILITY.md).
 
 ## Status of this Memo
 

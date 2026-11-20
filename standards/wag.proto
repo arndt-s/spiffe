@@ -3,7 +3,7 @@ syntax = "proto3";
 // The SPIFFE Workload Authorization Grant (WAG) Profile.
 // See SPIFFE_WAG_Profile.md for the normative description of this service.
 //
-// Stability: Incubating.
+// Stability: Experimental.
 package spiffe.wag.v1;
 
 import "brokerapi.proto";
