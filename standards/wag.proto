@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+// The SPIFFE Workload Authorization Grant (WAG) Profile.
+// See SPIFFE_WAG_Profile.md for the normative description of this service.
+//
+// Stability: Experimental.
+package spiffe.wag.v1;
+
+import "brokerapi.proto";
+
+// WorkloadAuthorizationGrant is served on the SPIFFE Workload Endpoint,
+// alongside (and independent of) the SPIFFE Workload API.
+service WorkloadAuthorizationGrant {
+    // Fetch Workload Authorization Grants for the calling workload, addressed
+    // to the requested audience (an OAuth authorization server). If an
+    // optional SPIFFE ID is requested, only the grant for that SPIFFE ID is
+    // returned.
+    //
+    // The subject of every grant is the SPIFFE ID of the attested caller. It
+    // is never taken from the request.
+    rpc FetchWAG(FetchWAGRequest) returns (FetchWAGResponse);
+}
+
+// The FetchWAGRequest message conveys parameters for requesting Workload
+// Authorization Grants. Field names follow the OAuth 2.0 Token Exchange
+// request (RFC 8693, Section 2.1) where a parameter carries over.
+message FetchWAGRequest {
+    // Required. The issuer identifier (RFC 8414) of the authorization server
+    // at which the workload will present the grant. Becomes the single value
+    // of the grant's `aud` claim.
+    string audience = 1;
+
+    // Optional. A space-separated list of OAuth scopes (RFC 6749, Section
+    // 3.3) the workload asks to have asserted in the grant's `scope` claim.
+    string scope = 2;
+
+    // Optional. The SPIFFE ID of the identity to request a grant for. If
+    // unset, grants for all identities the workload is entitled to are
+    // returned.
+    string spiffe_id = 3;
+}
+
+// The FetchWAGResponse message conveys Workload Authorization Grants.
+message FetchWAGResponse {
+    // Required. One grant per returned identity. The first entry is the grant
+    // for the default identity.
+    repeated WAG grants = 1;
+}
+
+// The WAG message carries one Workload Authorization Grant and associated
+// metadata. Field names follow the OAuth 2.0 Token Exchange response
+// (RFC 8693, Section 2.2.1) where a parameter carries over.
+message WAG {
+    // Required. The SPIFFE ID of the workload. Equal to the grant's `sub`
+    // claim.
+    string spiffe_id = 1;
+
+    // Required. The grant: a JWT using JWS Compact Serialization.
+    bytes issued_token = 2;
+
+    // Required. Expiration time of the grant, in seconds since the Unix epoch.
+    // Equal to the grant's `exp` claim.
+    int64 expires_at = 3;
+
+    // Optional. The scopes asserted in the grant's `scope` claim, if any.
+    string scope = 4;
+
+    // Optional. An operator-specified string used to provide guidance on how
+    // this identity should be used by a workload when more than one grant is
+    // returned.
+    string hint = 5;
+}
+
+// WorkloadAuthorizationGrantBroker is served on the SPIFFE Broker Endpoint,
+// alongside (and independent of) the SPIFFE Broker API.
+service WorkloadAuthorizationGrantBroker {
+    // Fetch Workload Authorization Grants for the referenced workload,
+    // addressed to the requested audience. If an optional SPIFFE ID is
+    // requested, only the grant for that SPIFFE ID is returned.
+    //
+    // The subject of every grant is a SPIFFE ID of the referenced workload,
+    // never that of the broker.
+    rpc FetchWAG(BrokerFetchWAGRequest) returns (FetchWAGResponse);
+}
+
+// The BrokerFetchWAGRequest message conveys parameters for requesting
+// Workload Authorization Grants on behalf of a workload.
+message BrokerFetchWAGRequest {
+    // Required. The reference identifying the workload.
+    spiffe.broker.WorkloadReference reference = 1;
+
+    // Required. The issuer identifier (RFC 8414) of the authorization server
+    // at which the grant will be presented. Becomes the single value of the
+    // grant's `aud` claim.
+    string audience = 2;
+
+    // Optional. A space-separated list of OAuth scopes (RFC 6749, Section
+    // 3.3) to have asserted in the grant's `scope` claim.
+    string scope = 3;
+
+    // Optional. The SPIFFE ID of the identity to request a grant for. If
+    // unset, grants for all identities the referenced workload is entitled to
+    // are returned.
+    string spiffe_id = 4;
+}
