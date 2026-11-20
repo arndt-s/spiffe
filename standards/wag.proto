@@ -32,13 +32,10 @@ message FetchWAGRequest {
     // 3.3) the workload asks to have asserted in the grant's `scope` claim.
     string scope = 2;
 
-    // Optional. If set, MUST be "urn:ietf:params:oauth:token-type:wag".
-    string requested_token_type = 3;
-
     // Optional. The SPIFFE ID of the identity to request a grant for. If
     // unset, grants for all identities the workload is entitled to are
     // returned.
-    string spiffe_id = 4;
+    string spiffe_id = 3;
 }
 
 // The FetchWAGResponse message conveys Workload Authorization Grants.
@@ -59,18 +56,15 @@ message WAG {
     // Required. The grant: a JWT using JWS Compact Serialization.
     bytes issued_token = 2;
 
-    // Required. Always "urn:ietf:params:oauth:token-type:wag".
-    string issued_token_type = 3;
-
     // Required. Expiration time of the grant, in seconds since the Unix epoch.
     // Equal to the grant's `exp` claim.
-    int64 expires_at = 4;
+    int64 expires_at = 3;
 
     // Optional. The scopes asserted in the grant's `scope` claim, if any.
-    string scope = 5;
+    string scope = 4;
 
     // Optional. An operator-specified string used to provide guidance on how
     // this identity should be used by a workload when more than one grant is
     // returned.
-    string hint = 6;
+    string hint = 5;
 }

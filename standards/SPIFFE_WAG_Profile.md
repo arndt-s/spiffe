@@ -21,7 +21,7 @@ A SPIFFE deployment already attests workloads and names them with SPIFFE IDs. Th
 3.2. [Subject - `sub`](#32-subject---sub)  
 3.3. [Audience - `aud`](#33-audience---aud)  
 3.4. [Scope - `scope`](#34-scope---scope)  
-3.5. [Lifetime and JWT ID](#35-lifetime-and-jwt-id)  
+3.5. [Freshness](#35-freshness)  
 3.6. [Additional Claims](#36-additional-claims)  
 4\. [Signing Keys](#4-signing-keys)  
 5\. [Service Definition](#5-service-definition)  
@@ -39,7 +39,7 @@ The WAG specification leaves out of scope how a workload obtains its grant. In a
 
 A WAG is not an SVID. It is not presented to other SPIFFE workloads, it is not validated against a SPIFFE bundle by its recipient, and it is consumed only by an OAuth authorization server. For that reason this profile is not part of the [SPIFFE Workload API](SPIFFE_Workload_API.md). It is an independent gRPC service, versioned on its own, served on the SPIFFE Workload Endpoint as described in [Extensibility and Services Rendered](SPIFFE_Workload_Endpoint.md#7-extensibility-and-services-rendered).
 
-The service follows the shape of [OAuth 2.0 Token Exchange][2]: it reuses the token exchange parameter names and the IANA token type identifier for the WAG, but it is carried over gRPC, and the subject is never sent in the request. The subject is always the attested caller.
+The service follows the shape of [OAuth 2.0 Token Exchange][2]: it reuses the token exchange parameter names, but it is carried over gRPC, the token type is fixed by the RPC, and the subject is never sent in the request. The subject is always the attested caller.
 
 This profile defines no RPC for trust material. Authorization servers obtain the keys that verify a WAG as described in the WAG specification, not from the Workload Endpoint.
 
@@ -83,11 +83,9 @@ If the request carries a `scope`, the server MAY include it in the `scope` claim
 
 The authorization server decides which scopes to grant. A scope in the WAG is an assertion by the Workload Identity Provider, not a grant of access.
 
-### 3.5. Lifetime and JWT ID
+### 3.5. Freshness
 
-A WAG SHOULD be short-lived. Its lifetime SHOULD NOT exceed five minutes.
-
-Every WAG MUST carry a `jti` that is unique among all WAGs issued under its issuer identifier. A server MUST mint a new WAG for each call to `FetchWAG` and MUST NOT return the same WAG in response to more than one call, so that authorization servers that enforce single use of a `jti` can do so.
+Lifetime and the `exp`, `iat` and `jti` claims are as defined in [Section 5][1] of the WAG specification. A server MUST mint a new WAG for each call to `FetchWAG` and MUST NOT return the same WAG in response to more than one call, so that authorization servers that enforce single use of a `jti` can do so.
 
 ### 3.6. Additional Claims
 
@@ -127,11 +125,8 @@ message FetchWAGRequest {
     // Optional. Space-separated list of requested scopes.
     string scope = 2;
 
-    // Optional. If set, MUST be "urn:ietf:params:oauth:token-type:wag".
-    string requested_token_type = 3;
-
     // Optional. The SPIFFE ID to request a grant for.
-    string spiffe_id = 4;
+    string spiffe_id = 3;
 }
 
 message FetchWAGResponse {
@@ -146,17 +141,14 @@ message WAG {
     // Required. The grant, a JWT using JWS Compact Serialization.
     bytes issued_token = 2;
 
-    // Required. "urn:ietf:params:oauth:token-type:wag".
-    string issued_token_type = 3;
-
     // Required. The grant's `exp` claim, in seconds since the Unix epoch.
-    int64 expires_at = 4;
+    int64 expires_at = 3;
 
     // Optional. The grant's `scope` claim, if any.
-    string scope = 5;
+    string scope = 4;
 
     // Optional. Operator guidance on how to use this identity.
-    string hint = 6;
+    string hint = 5;
 }
 ```
 
@@ -168,8 +160,6 @@ The `audience` field is mandatory and MUST contain an absolute URI. The server M
 
 The `scope` field is optional and is handled as described in [Scope](#34-scope---scope).
 
-The `requested_token_type` field is optional. If it is set to any value other than `urn:ietf:params:oauth:token-type:wag`, the server MUST reject the request.
-
 The `spiffe_id` field is optional. If set, the server MUST return only the WAG for that SPIFFE ID, or reject the request if the caller is not entitled to it. If unset, the server MUST return a WAG for every identity the caller is entitled to, with the WAG for the default identity first (see [Default Identity](SPIFFE_Workload_API.md#8-default-identity)).
 
 The `FetchWAGResponse` message consists of a mandatory `grants` field, which MUST contain one or more `WAG` messages. In each `WAG` message, all fields are mandatory except `scope` and `hint`. The `spiffe_id`, `expires_at` and `scope` fields MUST equal the `sub`, `exp` and `scope` claims of the grant in `issued_token`. When `hint` is set, its value MUST be unique among the grants in the response, and is subject to the same rules as in the [Default Identity](SPIFFE_Workload_API.md#8-default-identity) section of the SPIFFE Workload API.
@@ -180,7 +170,7 @@ In addition to the codes defined by the [SPIFFE Workload Endpoint](SPIFFE_Worklo
 
 | Code | Condition | Client Behavior |
 |------|-----------|-----------------|
-| InvalidArgument | `audience` is missing or is not an absolute URI, or `requested_token_type` is set to another value. | Report an error, don't retry. |
+| InvalidArgument | `audience` is missing or is not an absolute URI. | Report an error, don't retry. |
 | PermissionDenied | The caller is not entitled to any identity, to the requested `spiffe_id`, or to a WAG for the requested `audience`. | Retry with a backoff. |
 | Unimplemented | The server does not implement this profile. | Report an error, don't retry. |
 
@@ -194,7 +184,7 @@ A client MUST NOT present a WAG to any party other than the authorization server
 
 ## 7. Security Considerations
 
-The WAG is a bearer credential. Anyone who obtains it can redeem it at the authorization server named in its `aud` until it expires, or, where the authorization server enforces single use, until it is first redeemed. A short lifetime, a single audience, and a fresh `jti` per call limit what a stolen WAG is worth. Binding a WAG to a key held by the workload is an open issue in the WAG specification. A future version of this profile may add a key or CSR to the request once that is settled.
+The WAG is a bearer credential. Anyone who obtains it can redeem it at the authorization server named in its `aud` until it expires, or, where the authorization server enforces single use, until it is first redeemed. A short lifetime, a single audience, and a new WAG per call limit what a stolen WAG is worth. Binding a WAG to a key held by the workload is an open issue in the WAG specification. A future version of this profile may add a key or CSR to the request once that is settled.
 
 Because the server signs whatever audience the caller asks for, any workload entitled to a WAG can obtain one addressed to any authorization server. This does not grant access by itself: an authorization server accepts a WAG only from a Workload Identity Provider it has been configured to trust. Operators who want to limit which authorization servers a workload can reach SHOULD restrict permitted audiences per workload.
 
@@ -212,11 +202,11 @@ An authorization server keys its records on the pair of issuer identifier and SP
 | `resource` | Not used. The resource is sent by the workload to the authorization server, not encoded in the WAG. |
 | `audience` | `audience`. Exactly one value. |
 | `scope` | `scope`. |
-| `requested_token_type` | `requested_token_type`. Only `urn:ietf:params:oauth:token-type:wag`. |
+| `requested_token_type` | Not sent. Implied by the RPC: always `urn:ietf:params:oauth:token-type:wag`. |
 | `subject_token`, `subject_token_type` | Not sent. The subject is the attested caller. `spiffe_id` selects among its identities. |
 | `actor_token`, `actor_token_type` | Not used. Delegation is out of scope of the WAG specification. |
 | `access_token` (response) | `issued_token`. Renamed because the issued token is a grant, not an access token. Carried as bytes. |
-| `issued_token_type` (response) | `issued_token_type`. |
+| `issued_token_type` (response) | Not returned. Implied by the RPC. |
 | `token_type` (response) | Not used. It would always be `N_A`. |
 | `expires_in` (response) | `expires_at`. An absolute time stays correct when the response is held before use. |
 | `scope` (response) | `scope`. |
