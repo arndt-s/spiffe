@@ -14,8 +14,9 @@ import "google/protobuf/struct.proto";
 // Transaction Token Service (TTS) of the Txn-Token trust domain.
 service TransactionToken {
     // Fetch a Transaction Token (Txn-Token) for a transaction the calling
-    // workload is handling. The `req_wl` claim of the Txn-Token is the SPIFFE
-    // ID of the attested caller. It is never taken from the request.
+    // workload is handling. The `req_wl` claim of the Txn-Token is a SPIFFE
+    // ID of the attested caller: the requested `spiffe_id`, or the default
+    // identity if unset.
     rpc FetchTransactionToken(FetchTransactionTokenRequest) returns (FetchTransactionTokenResponse);
 
     // Validate a Txn-Token on behalf of the calling workload, which received
@@ -46,15 +47,18 @@ message FetchTransactionTokenRequest {
     // `urn:ietf:params:oauth:token-type:txn_token`.
     string subject_token_type = 4;
 
-    // Optional. A JSON object, encoded as JSON text, describing the context
-    // in which the transaction was requested (for example the IP address of
-    // the external caller). Used to determine the `rctx` claim.
-    string request_context = 5;
+    // Optional. A JSON object describing the context in which the
+    // transaction was requested (for example the IP address of the external
+    // caller). Used to determine the `rctx` claim.
+    google.protobuf.Struct request_context = 5;
 
-    // Optional. A JSON object, encoded as JSON text, carrying the API
-    // parameters or other details of the request. Used to determine the
-    // `tctx` claim.
-    string request_details = 6;
+    // Optional. A JSON object carrying the API parameters or other details of
+    // the request. Used to determine the `tctx` claim.
+    google.protobuf.Struct request_details = 6;
+
+    // Optional. The SPIFFE ID of the identity to request the Txn-Token as.
+    // Becomes the `req_wl` claim. If unset, the default identity is used.
+    string spiffe_id = 7;
 }
 
 // The FetchTransactionTokenResponse message conveys a Txn-Token.

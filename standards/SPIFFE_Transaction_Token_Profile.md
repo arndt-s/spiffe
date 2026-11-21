@@ -42,7 +42,7 @@ The Transaction Tokens specification requires that a workload and the TTS authen
 
 A Txn-Token is not an SVID. It does not identify the workload that presents it, it MUST NOT be used to authenticate a workload, and it is validated against the keys of a TTS rather than against a SPIFFE bundle. For that reason this profile is not part of the [SPIFFE Workload API](SPIFFE_Workload_API.md). It is an independent gRPC service, versioned on its own, served on the SPIFFE Workload Endpoint as described in [Extensibility and Services Rendered](SPIFFE_Workload_Endpoint.md#7-extensibility-and-services-rendered). Workloads continue to authenticate to each other with SVIDs, and carry the Txn-Token alongside.
 
-The service follows the shape of the Txn-Token request, which is itself an [OAuth 2.0 Token Exchange][2] request: it reuses the request parameter names, but it is carried over gRPC, the requested token type is fixed by the RPC, and the requesting workload is never named in the request. It is the attested caller.
+The service follows the shape of the Txn-Token request, which is itself an [OAuth 2.0 Token Exchange][2] request: it reuses the request parameter names, but it is carried over gRPC, the requested token type is fixed by the RPC, and the requesting workload is always the attested caller. The request only selects among its identities.
 
 ## 2. Terminology
 
@@ -77,7 +77,7 @@ The `aud` claim MUST be the `audience` from the request. It MUST be the name of 
 
 ### 4.2. Requesting Workload - `req_wl`
 
-The `req_wl` claim MUST be set to the SPIFFE ID of the attested caller (see [Identifying the Caller](SPIFFE_Workload_API.md#41-identifying-the-caller)). If the caller is entitled to more than one identity, it MUST be the SPIFFE ID of the default identity (see [Default Identity](SPIFFE_Workload_API.md#8-default-identity)). It MUST NOT be taken from any field of the request.
+The `req_wl` claim MUST be set to a SPIFFE ID of an identity the attested caller is entitled to (see [Identifying the Caller](SPIFFE_Workload_API.md#41-identifying-the-caller)). If the request carries a `spiffe_id`, `req_wl` MUST be that SPIFFE ID, and the server MUST reject the request if the caller is not entitled to it. If not, `req_wl` MUST be the SPIFFE ID of the default identity (see [Default Identity](SPIFFE_Workload_API.md#8-default-identity)). It MUST NOT be taken from any other field of the request.
 
 When a workload requests a replacement Txn-Token, the server sets `req_wl` of the replacement in the same way, to the workload that requested the replacement.
 
@@ -148,10 +148,13 @@ message FetchTransactionTokenRequest {
     string subject_token_type = 4;
 
     // Optional. JSON object describing the request context.
-    string request_context = 5;
+    google.protobuf.Struct request_context = 5;
 
     // Optional. JSON object with details of the request.
-    string request_details = 6;
+    google.protobuf.Struct request_details = 6;
+
+    // Optional. The SPIFFE ID to request the Txn-Token as.
+    string spiffe_id = 7;
 }
 
 message FetchTransactionTokenResponse {
@@ -199,7 +202,9 @@ The `subject_token` and `subject_token_type` fields are mandatory. `subject_toke
 
 A workload SHOULD NOT present a JWT-SVID or WIT-SVID as `subject_token`. The caller is already authenticated by the endpoint, and an SVID names a workload, not the principal of a transaction.
 
-The `request_context` and `request_details` fields are optional. If set, each MUST contain a JSON object encoded as JSON text as defined in [RFC 8259][4], and is processed as described in [Transaction and Request Context](#45-transaction-and-request-context---tctx-and-rctx).
+The `request_context` and `request_details` fields are optional. Each carries the JSON object of the parameter of the same name in the Transaction Tokens specification as a `google.protobuf.Struct`, and is processed as described in [Transaction and Request Context](#45-transaction-and-request-context---tctx-and-rctx). Because a `Struct` represents every number as a double-precision floating point value, clients SHOULD send numbers that need more precision, such as large identifiers, as strings.
+
+The `spiffe_id` field is optional and selects the identity the Txn-Token is requested as, as described in [Requesting Workload](#42-requesting-workload---req_wl).
 
 The `FetchTransactionTokenResponse` message consists of two mandatory fields. `txn_token` contains the Txn-Token. `expires_at` MUST equal the `exp` claim of the Txn-Token.
 
@@ -221,8 +226,8 @@ In addition to the codes defined by the [SPIFFE Workload Endpoint](SPIFFE_Worklo
 
 | RPC | Code | Condition | Client Behavior |
 |-----|------|-----------|-----------------|
-| FetchTransactionToken | InvalidArgument | A mandatory field is missing, `subject_token_type` is unsupported, `subject_token` fails validation, or `request_context` or `request_details` is not a JSON object. | Report an error, don't retry. |
-| FetchTransactionToken | PermissionDenied | The caller is not a member of the requested Txn-Token trust domain, or operator policy refuses the requested scope or subject. | Report an error, don't retry. |
+| FetchTransactionToken | InvalidArgument | A mandatory field is missing, `subject_token_type` is unsupported, or `subject_token` fails validation. | Report an error, don't retry. |
+| FetchTransactionToken | PermissionDenied | The caller is not entitled to the requested `spiffe_id`, is not a member of the requested Txn-Token trust domain, or operator policy refuses the requested scope or subject. | Report an error, don't retry. |
 | ValidateTransactionToken | InvalidArgument | `txn_token` is missing, or the Txn-Token fails validation. | Treat the Txn-Token as invalid. |
 | ValidateTransactionToken | PermissionDenied | The caller is not a member of the requested Txn-Token trust domain, or `audience` is unset and the caller is a member of more than one. | Report an error, don't retry. |
 | Both | Unimplemented | The server does not implement this profile. | Report an error, don't retry. |
@@ -259,9 +264,9 @@ The `rctx` and `tctx` claims may contain personal information, such as the IP ad
 | `scope` | `scope`. |
 | `subject_token` | `subject_token`. Carried as bytes. |
 | `subject_token_type` | `subject_token_type`. |
-| `request_context` | `request_context`. JSON text. |
-| `request_details` | `request_details`. JSON text. |
-| Client authentication | Not sent. The caller is attested by the Workload Endpoint, and its SPIFFE ID becomes `req_wl`. |
+| `request_context` | `request_context`. A `google.protobuf.Struct`. |
+| `request_details` | `request_details`. A `google.protobuf.Struct`. |
+| Client authentication | Not sent. The caller is attested by the Workload Endpoint, and its SPIFFE ID becomes `req_wl`. `spiffe_id` selects among its identities. |
 | `access_token` (response) | `txn_token`. Renamed because the issued token is not an access token. |
 | `issued_token_type` (response) | Not returned. Implied by the RPC. |
 | `token_type` (response) | Not used. It is always `N_A`. |
@@ -277,8 +282,8 @@ audience:           "spiffe://example.org"
 scope:              "trade.stocks"
 subject_token:      "eyJhbGciOiJFUzI1NiIs..."
 subject_token_type: "urn:ietf:params:oauth:token-type:access_token"
-request_context:    "{\"req_ip\":\"69.151.72.123\"}"
-request_details:    "{\"action\":\"BUY\",\"ticker\":\"MSFT\",\"quantity\":\"100\"}"
+request_context:    { req_ip: "69.151.72.123" }
+request_details:    { action: "BUY", ticker: "MSFT", quantity: "100" }
 ```
 
 The server returns a Txn-Token that decodes to the following header and claims:
@@ -320,4 +325,3 @@ The receiving workload calls `ValidateTransactionToken` with the header value as
 [1]: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-transaction-tokens-11
 [2]: https://www.rfc-editor.org/rfc/rfc8693
 [3]: https://www.rfc-editor.org/rfc/rfc2119
-[4]: https://www.rfc-editor.org/rfc/rfc8259
