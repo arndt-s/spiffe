@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+// The SPIFFE Transaction Token Profile.
+// See SPIFFE_Transaction_Token_Profile.md for the normative description of
+// this service.
+//
+// Stability: Experimental.
+package spiffe.txntoken.v1;
+
+import "google/protobuf/struct.proto";
+
+// TransactionToken is served on the SPIFFE Workload Endpoint, alongside (and
+// independent of) the SPIFFE Workload API. The server acts as the
+// Transaction Token Service (TTS) of the Txn-Token trust domain.
+service TransactionToken {
+    // Fetch a Transaction Token (Txn-Token) for a transaction the calling
+    // workload is handling. The `req_wl` claim of the Txn-Token is a SPIFFE
+    // ID of the attested caller: the requested `spiffe_id`, or the default
+    // identity if unset.
+    rpc FetchTransactionToken(FetchTransactionTokenRequest) returns (FetchTransactionTokenResponse);
+
+    // Validate a Txn-Token on behalf of the calling workload, which received
+    // it from another workload in the same Txn-Token trust domain.
+    rpc ValidateTransactionToken(ValidateTransactionTokenRequest) returns (ValidateTransactionTokenResponse);
+}
+
+// The FetchTransactionTokenRequest message conveys parameters for requesting
+// a Txn-Token. Field names follow the Txn-Token request (Transaction Tokens,
+// Section 11.1), which extends the OAuth 2.0 Token Exchange request
+// (RFC 8693, Section 2.1).
+message FetchTransactionTokenRequest {
+    // Required. The name of the Txn-Token trust domain in which the Txn-Token
+    // will be valid. Becomes the `aud` claim of the Txn-Token.
+    string audience = 1;
+
+    // Required. A space-separated list of case-sensitive strings that
+    // identifies the purpose of the transaction.
+    string scope = 2;
+
+    // Required. The token that represents the identity of the principal on
+    // whose behalf the transaction is handled, such as the token presented
+    // by an external caller, or a previously issued Txn-Token.
+    bytes subject_token = 3;
+
+    // Required. A URI identifying the type of `subject_token`, for example
+    // `urn:ietf:params:oauth:token-type:access_token` or
+    // `urn:ietf:params:oauth:token-type:txn_token`.
+    string subject_token_type = 4;
+
+    // Optional. A JSON object describing the context in which the
+    // transaction was requested (for example the IP address of the external
+    // caller). Used to determine the `rctx` claim.
+    google.protobuf.Struct request_context = 5;
+
+    // Optional. A JSON object carrying the API parameters or other details of
+    // the request. Used to determine the `tctx` claim.
+    google.protobuf.Struct request_details = 6;
+
+    // Optional. The SPIFFE ID of the identity to request the Txn-Token as.
+    // Becomes the `req_wl` claim. If unset, the default identity is used.
+    string spiffe_id = 7;
+}
+
+// The FetchTransactionTokenResponse message conveys a Txn-Token.
+message FetchTransactionTokenResponse {
+    // Required. The Txn-Token: a JWT using JWS Compact Serialization.
+    string txn_token = 1;
+
+    // Required. Expiration time of the Txn-Token, in seconds since the Unix
+    // epoch. Equal to the Txn-Token's `exp` claim.
+    int64 expires_at = 2;
+}
+
+// The ValidateTransactionTokenRequest message conveys a Txn-Token to
+// validate.
+message ValidateTransactionTokenRequest {
+    // Required. The Txn-Token to validate, a JWT using JWS Compact
+    // Serialization, as received in the `Txn-Token` HTTP header.
+    string txn_token = 1;
+
+    // Optional. The name of the Txn-Token trust domain the Txn-Token must be
+    // valid in. If unset, the server uses the Txn-Token trust domain of the
+    // calling workload.
+    string audience = 2;
+}
+
+// The ValidateTransactionTokenResponse message conveys the Txn-Token
+// validation results.
+message ValidateTransactionTokenResponse {
+    // Required. The `txn` claim: the unique transaction identifier.
+    string txn = 1;
+
+    // Required. The `sub` claim: the principal of the transaction.
+    string sub = 2;
+
+    // Required. The `req_wl` claim: the workload that requested the
+    // Txn-Token.
+    string req_wl = 3;
+
+    // Required. Claims contained within the payload of the validated
+    // Txn-Token.
+    google.protobuf.Struct claims = 4;
+}
